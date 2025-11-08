@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Call Logs - DialAI</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Call Logs</h1>
+            <p class="subtitle">View all call history and status</p>
+        </header>
+
+        <main>
+            <section class="card">
+                <div class="logs-header">
+                    <h2>Call History</h2>
+                    <div class="action-buttons">
+                        <a href="/" class="btn btn-primary">Back to Home</a>
+                        <button class="btn btn-outline" onclick="refreshLogs()">Refresh</button>
+                        <button class="btn btn-outline" onclick="cleanupLogs()" id="cleanupBtn">Cleanup Errors</button>
+                    </div>
+                </div>
+
+                {% if logs %}
+                <div class="table-container">
+                    <table class="logs-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Phone Number</th>
+                                <th>Status</th>
+                                <th>Timestamp</th>
+                                <th>Call SID</th>
+                                <th>Error</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in logs|reverse %}
+                            <tr class="{% if log.success %}success-row{% else %}error-row{% endif %}">
+                                <td>{{ loop.index }}</td>
+                                <td>{{ log.number }}</td>
+                                <td>
+                                    <span class="status-badge {% if log.success %}status-success{% else %}status-error{% endif %}">
+                                        {{ log.status|upper if log.status else 'FAILED' }}
+                                    </span>
+                                </td>
+                                <td>{{ log.timestamp[:19] if log.timestamp else 'N/A' }}</td>
+                                <td class="call-sid">{{ log.call_sid[:20] + '...' if log.call_sid and log.call_sid|length > 20 else (log.call_sid or 'N/A') }}</td>
+                                <td class="error-cell">{{ (log.error|clean_ansi if log.error else '-') }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="stats">
+                    <p><strong>Total Calls:</strong> {{ logs|length }}</p>
+                    <p><strong>Successful:</strong> {{ logs|selectattr('success')|list|length }}</p>
+                    <p><strong>Failed:</strong> {{ logs|rejectattr('success')|list|length }}</p>
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <p>No call logs yet. Make your first call from the home page!</p>
+                    <a href="/" class="btn btn-primary">Go to Home</a>
+                </div>
+                {% endif %}
+            </section>
+        </main>
+    </div>
+
+    <script>
+        function refreshLogs() {
+            location.reload();
+        }
+
+        async function cleanupLogs() {
+            const btn = document.getElementById('cleanupBtn');
+            const originalText = btn.textContent;
+            
+            btn.disabled = true;
+            btn.textContent = 'Cleaning...';
+            
+            try {
+                const response = await fetch('/api/cleanup-logs', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`${data.message}`);
+                    // Refresh the page to show cleaned logs
+                    location.reload();
+                } else {
+                    alert(`Error: ${data.error}`);
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                }
+            } catch (error) {
+                alert(`Network error: ${error.message}`);
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+
+        // Auto-refresh every 30 seconds
+        setInterval(refreshLogs, 30000);
+    </script>
+</body>
+</html>
+

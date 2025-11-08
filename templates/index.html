@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DialAI - Phone Call Automation</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>DialAI</h1>
+            <p class="subtitle">Automated Phone Call System with AI Commands</p>
+        </header>
+
+        <main>
+            <!-- Phone Numbers Input Section -->
+            <section class="card">
+                <h2>Phone Numbers</h2>
+                <p class="description">Enter phone numbers (comma or newline separated) or upload a file</p>
+                
+                <form id="phoneForm" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="numbers">Phone Numbers:</label>
+                        <textarea 
+                            id="numbers" 
+                            name="numbers" 
+                            rows="8" 
+                            placeholder="Enter numbers with country code:&#10;+919895431875 (India)&#10;+18001234567 (US)&#10;&#10;Or without country code (app will try to match verified numbers):&#10;9895431875&#10;8001234567"
+                        ></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="file">Or Upload File (.txt or .csv):</label>
+                        <input type="file" id="file" name="file" accept=".txt,.csv">
+                    </div>
+                    
+                    <div class="form-group">
+                        <div class="action-buttons">
+                            <button type="submit" class="btn btn-primary" id="startCallBtn">
+                                Start Calling
+                            </button>
+                            <button type="button" class="btn btn-outline" onclick="checkVerification()" id="checkVerificationBtn">
+                                Check Verification Status
+                            </button>
+                        </div>
+                    </div>
+                </form>
+                
+                <div id="verificationResult" class="verification-result"></div>
+            </section>
+
+            <!-- AI Command Section -->
+            <section class="card">
+                <h2>AI Command</h2>
+                <p class="description">Use natural language to control DialAI</p>
+                
+                <form id="aiForm">
+                    <div class="form-group">
+                        <label for="command">Command:</label>
+                        <input 
+                            type="text" 
+                            id="command" 
+                            name="command" 
+                            placeholder='Try: "Call 9876543210" or "Start calling all numbers"'
+                        >
+                    </div>
+                    
+                    <button type="submit" class="btn btn-secondary" id="sendCommandBtn">
+                        Send Command
+                    </button>
+                </form>
+                
+                <div id="aiResponse" class="response-box"></div>
+            </section>
+
+            <!-- Quick Actions -->
+            <section class="card">
+                <h2>Quick Actions</h2>
+                <div class="action-buttons">
+                    <a href="/logs" class="btn btn-outline">View Call Logs</a>
+                    <button class="btn btn-outline" onclick="clearForm()">Clear Form</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const phoneForm = document.getElementById('phoneForm');
+        const aiForm = document.getElementById('aiForm');
+        const aiResponse = document.getElementById('aiResponse');
+        const verificationResult = document.getElementById('verificationResult');
+
+        // Handle phone number form submission
+        phoneForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(phoneForm);
+            const startBtn = document.getElementById('startCallBtn');
+            
+            startBtn.disabled = true;
+            startBtn.textContent = 'Calling...';
+
+            try {
+                const response = await fetch('/call', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const successCount = data.results.filter(r => r.success).length;
+                    verificationResult.innerHTML = `
+                        <div class="verification-success">
+                            <p class="success">Calls initiated successfully!</p>
+                            <p>Total: ${data.total} | Successful: ${successCount} | Failed: ${data.total - successCount}</p>
+                            <p><a href="/logs" class="btn-link">View detailed logs →</a></p>
+                        </div>
+                    `;
+                } else {
+                    verificationResult.innerHTML = `<div class="verification-error"><p class="error">Error: ${data.error}</p></div>`;
+                }
+            } catch (error) {
+                verificationResult.innerHTML = `<div class="verification-error"><p class="error">Network error: ${error.message}</p></div>`;
+            } finally {
+                startBtn.disabled = false;
+                startBtn.textContent = 'Start Calling';
+            }
+        });
+
+        // Handle AI command form submission
+        aiForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const command = document.getElementById('command').value;
+            const numbers = document.getElementById('numbers').value;
+            const sendBtn = document.getElementById('sendCommandBtn');
+            
+            if (!command.trim()) {
+                aiResponse.innerHTML = '<p class="error">Please enter a command</p>';
+                return;
+            }
+
+            sendBtn.disabled = true;
+            sendBtn.textContent = 'Processing...';
+            aiResponse.innerHTML = '<p>Processing AI command...</p>';
+
+            try {
+                const formData = new FormData();
+                formData.append('command', command);
+                if (numbers) {
+                    formData.append('numbers', numbers);
+                }
+
+                const response = await fetch('/ai-command', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (data.action === 'call_single') {
+                        aiResponse.innerHTML = `
+                            <p class="success">Command executed: Calling ${data.result.number}</p>
+                            <p>Status: ${data.result.status}</p>
+                        `;
+                    } else if (data.action === 'call_all') {
+                        const successCount = data.results.filter(r => r.success).length;
+                        aiResponse.innerHTML = `
+                            <p class="success">Command executed: Started calling all numbers</p>
+                            <p>Total: ${data.total} | Successful: ${successCount}</p>
+                        `;
+                    }
+                } else {
+                    aiResponse.innerHTML = `<p class="error">Error: ${data.error}</p>`;
+                }
+            } catch (error) {
+                aiResponse.innerHTML = `<p class="error">Network error: ${error.message}</p>`;
+            } finally {
+                sendBtn.disabled = false;
+                sendBtn.textContent = 'Send Command';
+            }
+        });
+
+        function clearForm() {
+            document.getElementById('numbers').value = '';
+            document.getElementById('file').value = '';
+            document.getElementById('command').value = '';
+            aiResponse.innerHTML = '';
+            document.getElementById('verificationResult').innerHTML = '';
+        }
+
+        async function checkVerification() {
+            const numbers = document.getElementById('numbers').value.trim();
+            const checkBtn = document.getElementById('checkVerificationBtn');
+            const resultDiv = document.getElementById('verificationResult');
+            
+            if (!numbers) {
+                resultDiv.innerHTML = '<p class="error">Please enter at least one phone number to check</p>';
+                return;
+            }
+
+            checkBtn.disabled = true;
+            checkBtn.textContent = 'Checking...';
+            resultDiv.innerHTML = '<p>Checking verification status...</p>';
+
+            try {
+                // Parse the first number from the input
+                const numbersList = numbers.split(/[,\n\r]+/).map(n => n.trim()).filter(n => n);
+                if (numbersList.length === 0) {
+                    resultDiv.innerHTML = '<p class="error">No valid phone numbers found</p>';
+                    checkBtn.disabled = false;
+                    checkBtn.textContent = '✓ Check Verification Status';
+                    return;
+                }
+
+                const firstNumber = numbersList[0].replace(/[^\d+]/g, '');
+                const response = await fetch(`/api/check-verification/${encodeURIComponent(firstNumber)}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    if (data.is_verified) {
+                        resultDiv.innerHTML = `
+                            <div class="verification-success">
+                                <p class="success"><strong>${data.phone_number}</strong> is VERIFIED!</p>
+                                <p>You can call this number.</p>
+                            </div>
+                        `;
+                    } else {
+                        resultDiv.innerHTML = `
+                            <div class="verification-error">
+                                <p class="error"><strong>${data.phone_number}</strong> is NOT VERIFIED</p>
+                                <p>${data.message}</p>
+                                <p><strong>Your verified numbers:</strong></p>
+                                <ul>
+                                    ${data.verified_numbers.length > 0 
+                                        ? data.verified_numbers.map(n => `<li>${n}</li>`).join('')
+                                        : '<li>No verified numbers found</li>'}
+                                </ul>
+                                <p><a href="https://console.twilio.com/us1/develop/phone-numbers/manage/verified" target="_blank" class="btn-link">Verify this number →</a></p>
+                            </div>
+                        `;
+                    }
+                } else {
+                    resultDiv.innerHTML = `<p class="error">Error: ${data.error}</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">Network error: ${error.message}</p>`;
+            } finally {
+                checkBtn.disabled = false;
+                checkBtn.textContent = 'Check Verification Status';
+            }
+        }
+    </script>
+</body>
+</html>
+
