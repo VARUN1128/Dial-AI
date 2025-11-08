@@ -270,5 +270,4 @@ Feel free to submit issues, fork the repository, and create pull requests for an
 
 **Built with ❤️ using FastAPI, Twilio, and AI APIs**
 
-#   D i a l - A I  
- 
+#
